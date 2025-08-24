@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusCircle, Calendar, DollarSign, TrendingUp, Receipt, Trash2, Edit3, 
   Search, Filter, Download, Moon, Sun, X, ChevronDown, Camera,
-  BarChart3, TrendingDown, AlertCircle, Upload,
-  Settings
+  BarChart3, TrendingDown, AlertCircle,
+  Settings, User, Bell
 } from 'lucide-react';
 import { toast, Toaster } from 'react-hot-toast';
 import { format, subMonths, isWithinInterval } from 'date-fns';
@@ -13,6 +13,7 @@ import BudgetManager from './BudgetManager';
 import InsightsPanel from './InsightsPanel';
 import QuickActions from './QuickActions';
 import RecurringExpenses from './RecurringExpenses';
+import Profile from './Profile';
 
 const ExpenseTracker = () => {
   // Core States
@@ -36,8 +37,25 @@ const ExpenseTracker = () => {
   const [templates, setTemplates] = useState([]);
   const [viewMode, setViewMode] = useState('grid'); // grid, list, cards
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
+  const [profile, setProfile] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    location: '',
+    occupation: '',
+    bio: '',
+    avatarColor: 'bg-gradient-to-br from-blue-400 to-blue-600',
+    financialGoal: '',
+    createdAt: new Date().toISOString(),
+    showProfile: true,
+    notifications: {},
+    dateFormat: 'DD/MM/YYYY',
+    weekStart: 'monday'
+  });
   
-  const categories = useMemo(() => ['Food', 'Travel', 'Bills', 'Shopping', 'Entertainment', 'Healthcare', 'Education', 'Investment', 'Others'], []);
+  const categories = useMemo(() => ['Food', 'Travel', 'Bills', 'Shopping', 'Entertainment', 'Healthcare', 'Petrol', 'Investment', 'Others'], []);
   const currencies = [
     { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
     { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -53,6 +71,7 @@ const ExpenseTracker = () => {
     'Shopping': 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800',
     'Entertainment': 'bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-900/30 dark:text-pink-400 dark:border-pink-800',
     'Healthcare': 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+    'Petrol': 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
     'Education': 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800',
     'Investment': 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800',
     'Others': 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-900/30 dark:text-gray-400 dark:border-gray-800'
@@ -130,6 +149,10 @@ const ExpenseTracker = () => {
   useEffect(() => {
     localStorage.setItem('templates', JSON.stringify(templates));
   }, [templates]);
+
+  useEffect(() => {
+    localStorage.setItem('profile', JSON.stringify(profile));
+  }, [profile]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -381,18 +404,41 @@ const ExpenseTracker = () => {
     setShowAddForm(true);
   };
 
-  // Export to CSV
+  // Export to CSV - Complete expense history
   const exportToCSV = () => {
-    const headers = ['Date', 'Category', 'Amount', 'Notes', 'Tags'];
-    const data = filteredExpenses.map(exp => [
-      exp.date,
-      exp.category,
-      exp.amount,
-      exp.notes,
-      exp.tags?.join(', ') || ''
-    ]);
+    const headers = ['Date', 'Time', 'Category', 'Amount', 'Currency', 'Notes', 'Tags', 'Month', 'Year'];
+    
+    // Sort expenses by date (newest first)
+    const sortedExpenses = [...expenses].sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+    
+    const data = sortedExpenses.map(exp => {
+      const expDate = new Date(exp.timestamp || exp.date);
+      return [
+        exp.date,
+        expDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        exp.category,
+        exp.amount.toFixed(2),
+        exp.currency || currency,
+        exp.notes || '',
+        exp.tags?.join('; ') || '',
+        expDate.toLocaleDateString('en-US', { month: 'long' }),
+        expDate.getFullYear()
+      ];
+    });
+    
+    // Add summary at the top
+    const totalAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const summaryRows = [
+      ['EXPENSE HISTORY REPORT'],
+      [`Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`],
+      [`Total Expenses: ${expenses.length}`],
+      [`Total Amount: ${formatCurrency(totalAmount)}`],
+      [`Date Range: ${sortedExpenses.length > 0 ? sortedExpenses[sortedExpenses.length - 1].date + ' to ' + sortedExpenses[0].date : 'No expenses'}`],
+      [''],  // Empty row for spacing
+    ];
     
     const csvContent = [
+      ...summaryRows.map(row => row.join(',')),
       headers.join(','),
       ...data.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
@@ -401,45 +447,14 @@ const ExpenseTracker = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `expenses_${selectedMonth}.csv`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.download = `expense_history_${dateStr}.csv`;
     a.click();
     
-    toast.success('Expenses exported successfully!');
+    toast.success(`Exported ${expenses.length} expenses successfully!`);
   };
 
-  // Import from CSV
-  const importFromCSV = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',');
-      
-      const imported = lines.slice(1).map(line => {
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        if (!values || values.length < 3) return null;
-        
-        return {
-          id: Date.now() + Math.random(),
-          date: values[0]?.replace(/"/g, ''),
-          category: values[1]?.replace(/"/g, '') || 'Others',
-          amount: parseFloat(values[2]?.replace(/"/g, '') || 0),
-          notes: values[3]?.replace(/"/g, '') || '',
-          tags: values[4]?.replace(/"/g, '').split(', ').filter(Boolean) || [],
-          timestamp: new Date().toISOString(),
-          currency: currency
-        };
-      }).filter(Boolean);
-      
-      setExpenses(prev => [...prev, ...imported]);
-      toast.success(`Imported ${imported.length} expenses!`);
-    };
-    
-    reader.readAsText(file);
-  };
+  // Removed import functionality as requested
 
   // Use template
   const useTemplate = (template) => {
@@ -467,9 +482,11 @@ const ExpenseTracker = () => {
       >
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Receipt className="w-7 h-7 md:w-8 md:h-8 text-blue-600 dark:text-blue-400" />
-              ExpenseTracker Pro
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+              <img src="/logo.png" alt="SpendSmart" className="w-8 h-8 md:w-10 md:h-10" />
+              <span className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent dark:from-blue-400 dark:to-blue-500">
+                SpendSmart
+              </span>
             </h1>
             
             {/* Budget Balance Display */}
@@ -513,6 +530,25 @@ const ExpenseTracker = () => {
                 )}
               </motion.div>
               
+              {/* Profile Avatar */}
+              {profile.showProfile !== false && (
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className="relative group"
+                >
+                  <div className={`w-10 h-10 rounded-full ${profile.avatarColor || 'bg-gradient-to-br from-blue-400 to-blue-600'} flex items-center justify-center text-white shadow-md hover:shadow-lg transition-shadow`}>
+                    {profile.profileImage ? (
+                      <img src={profile.profileImage} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      <span className="text-sm font-bold">
+                        {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                </button>
+              )}
+              
               {/* Dark Mode Toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
@@ -527,7 +563,7 @@ const ExpenseTracker = () => {
               
               {/* Settings */}
               <button 
-                onClick={() => setShowBudgetModal(true)}
+                onClick={() => setShowSettingsModal(true)}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -540,7 +576,7 @@ const ExpenseTracker = () => {
       {/* Navigation Tabs */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-wrap gap-2 py-4">
-          {['dashboard', 'expenses', 'analytics', 'budgets', 'insights'].map((tab) => (
+          {['dashboard', 'expenses', 'analytics', 'budgets', 'insights', 'profile'].map((tab) => (
             <motion.button
               key={tab}
               whileHover={{ scale: 1.05 }}
@@ -603,26 +639,14 @@ const ExpenseTracker = () => {
                   <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
                 </button>
                 
-                {/* Export/Import */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={exportToCSV}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export
-                  </button>
-                  <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    Import
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={importFromCSV}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                {/* Export */}
+                <button
+                  onClick={exportToCSV}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Export All
+                </button>
               </div>
               
               {/* Advanced Filters */}
@@ -1033,6 +1057,27 @@ const ExpenseTracker = () => {
               />
             </motion.div>
           )}
+
+          {/* Profile Tab */}
+          {activeTab === 'profile' && (
+            <motion.div
+              key="profile"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <Profile 
+                profile={profile}
+                setProfile={setProfile}
+                totalBudget={totalBudget}
+                expenses={expenses}
+                formatCurrency={formatCurrency}
+                currency={currency}
+                currencies={currencies}
+                setCurrency={setCurrency}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
 
@@ -1343,6 +1388,402 @@ const ExpenseTracker = () => {
                 >
                   Save Settings
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Comprehensive Settings Modal */}
+      <AnimatePresence>
+        {showSettingsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 w-full max-w-4xl max-h-[90vh] rounded-2xl overflow-hidden"
+            >
+              {/* Settings Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Settings className="w-7 h-7" />
+                    <h2 className="text-2xl font-bold">Settings</h2>
+                  </div>
+                  <button
+                    onClick={() => setShowSettingsModal(false)}
+                    className="text-white/80 hover:text-white transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Settings Content */}
+              <div className="flex flex-col md:flex-row h-[calc(90vh-100px)]">
+                {/* Settings Sidebar */}
+                <div className="w-full md:w-64 bg-gray-50 dark:bg-gray-900 border-r dark:border-gray-700 p-4">
+                  <nav className="space-y-2">
+                    {[
+                      { id: 'general', label: 'General', icon: Settings },
+                      { id: 'profile', label: 'Profile', icon: User },
+                      { id: 'budget', label: 'Budget', icon: DollarSign },
+                      { id: 'appearance', label: 'Appearance', icon: Moon },
+                      { id: 'notifications', label: 'Notifications', icon: Bell },
+                      { id: 'data', label: 'Data & Export', icon: Download }
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveSettingsTab(tab.id)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                          activeSettingsTab === tab.id
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <tab.icon className="w-5 h-5" />
+                        <span className="font-medium">{tab.label}</span>
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+
+                {/* Settings Panel */}
+                <div className="flex-1 p-6 overflow-y-auto">
+                  {/* General Settings */}
+                  {activeSettingsTab === 'general' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">General Settings</h3>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Default Currency
+                        </label>
+                        <select
+                          value={currency}
+                          onChange={(e) => setCurrency(e.target.value)}
+                          className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        >
+                          {currencies.map(curr => (
+                            <option key={curr.code} value={curr.code}>
+                              {curr.symbol} {curr.name} ({curr.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Date Format
+                        </label>
+                        <select
+                          value={profile.dateFormat || 'DD/MM/YYYY'}
+                          onChange={(e) => setProfile({ ...profile, dateFormat: e.target.value })}
+                          className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        >
+                          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Week Starts On
+                        </label>
+                        <select
+                          value={profile.weekStart || 'monday'}
+                          onChange={(e) => setProfile({ ...profile, weekStart: e.target.value })}
+                          className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        >
+                          <option value="sunday">Sunday</option>
+                          <option value="monday">Monday</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Profile Settings */}
+                  {activeSettingsTab === 'profile' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Profile Settings</h3>
+                      
+                      <div className="flex items-center gap-6 mb-6">
+                        <div className={`w-20 h-20 rounded-full ${profile.avatarColor || 'bg-gradient-to-br from-blue-400 to-blue-600'} flex items-center justify-center text-white text-2xl font-bold`}>
+                          {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => setActiveTab('profile')}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                          >
+                            Edit Full Profile
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Name
+                          </label>
+                          <input
+                            type="text"
+                            value={profile.name || ''}
+                            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                            className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="Your name"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            value={profile.email || ''}
+                            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                            className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="your@email.com"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={profile.showProfile !== false}
+                            onChange={(e) => setProfile({ ...profile, showProfile: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span className="text-gray-700 dark:text-gray-300">
+                            Show profile avatar in header
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Budget Settings */}
+                  {activeSettingsTab === 'budget' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Budget Settings</h3>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Monthly Budget
+                        </label>
+                        <input
+                          type="number"
+                          value={totalBudget}
+                          onChange={(e) => setTotalBudget(parseFloat(e.target.value) || 0)}
+                          className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          placeholder="Enter your monthly budget"
+                          step="100"
+                        />
+                      </div>
+
+                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600 dark:text-gray-400">Total Spent</span>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            {formatCurrency(totalSpent)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Remaining</span>
+                          <span className={`font-medium ${
+                            remainingBalance > 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {formatCurrency(remainingBalance)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setActiveTab('budgets')}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      >
+                        Manage Category Budgets
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Appearance Settings */}
+                  {activeSettingsTab === 'appearance' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Appearance</h3>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                          Theme
+                        </label>
+                        <div className="flex gap-4">
+                          <button
+                            onClick={() => setDarkMode(false)}
+                            className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                              !darkMode 
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' 
+                                : 'border-gray-200 dark:border-gray-700'
+                            }`}
+                          >
+                            <Sun className="w-6 h-6 mx-auto mb-2 text-yellow-500" />
+                            <p className="font-medium">Light</p>
+                          </button>
+                          <button
+                            onClick={() => setDarkMode(true)}
+                            className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                              darkMode 
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' 
+                                : 'border-gray-200 dark:border-gray-700'
+                            }`}
+                          >
+                            <Moon className="w-6 h-6 mx-auto mb-2 text-blue-600 dark:text-blue-400" />
+                            <p className="font-medium">Dark</p>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Default View Mode
+                        </label>
+                        <select
+                          value={viewMode}
+                          onChange={(e) => setViewMode(e.target.value)}
+                          className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        >
+                          <option value="grid">Grid View</option>
+                          <option value="list">List View</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notifications Settings */}
+                  {activeSettingsTab === 'notifications' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Notifications</h3>
+                      
+                      <div className="space-y-4">
+                        {[
+                          { key: 'budgetAlerts', label: 'Budget Alerts', desc: 'Get notified when approaching budget limits' },
+                          { key: 'weeklyReport', label: 'Weekly Summary', desc: 'Receive weekly spending summaries' },
+                          { key: 'savingsTips', label: 'Savings Tips', desc: 'Get personalized saving recommendations' },
+                          { key: 'achievements', label: 'Achievements', desc: 'Celebrate when you unlock new achievements' }
+                        ].map(notification => (
+                          <div key={notification.key} className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <div>
+                              <p className="font-medium text-gray-900 dark:text-white">{notification.label}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{notification.desc}</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={profile.notifications?.[notification.key] !== false}
+                                onChange={(e) => setProfile({
+                                  ...profile,
+                                  notifications: {
+                                    ...profile.notifications,
+                                    [notification.key]: e.target.checked
+                                  }
+                                })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Data & Export Settings */}
+                  {activeSettingsTab === 'data' && (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Data & Export</h3>
+                      
+                      <div>
+                        <h4 className="font-medium text-gray-900 dark:text-white mb-3">Export Data</h4>
+                        <div className="space-y-3">
+                          <button
+                            onClick={exportToCSV}
+                            className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                          >
+                            <Download className="w-5 h-5" />
+                            Export All Expenses as CSV
+                          </button>
+                          <button
+                            onClick={() => {
+                              const allData = {
+                                expenses,
+                                profile,
+                                budgets,
+                                totalBudget,
+                                recurringExpenses,
+                                templates
+                              };
+                              const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `spendsmart_backup_${new Date().toISOString().split('T')[0]}.json`;
+                              a.click();
+                              toast.success('Backup created successfully!');
+                            }}
+                            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                          >
+                            <Download className="w-5 h-5" />
+                            Create Full Backup (JSON)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="border-t dark:border-gray-700 pt-6">
+                        <h4 className="font-medium text-gray-900 dark:text-white mb-3">Data Storage</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          All your data is stored locally in your browser. No data is sent to any server.
+                        </p>
+                        <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                          <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                            ⚠️ Clearing browser data will permanently delete all your expenses and settings.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Settings Footer */}
+              <div className="border-t dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900">
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowSettingsModal(false)}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSettingsModal(false);
+                      toast.success('Settings saved successfully!');
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
