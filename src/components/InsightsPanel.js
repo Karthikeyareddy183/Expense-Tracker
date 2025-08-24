@@ -64,7 +64,6 @@ const InsightsPanel = ({ expenses, monthlyData, formatCurrency }) => {
     // Daily average
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const dailyAverage = currentTotal / daysInMonth;
-    const currentDay = new Date().getDate();
     const projectedTotal = dailyAverage * daysInMonth;
     
     insights.push({
@@ -130,7 +129,7 @@ const InsightsPanel = ({ expenses, monthlyData, formatCurrency }) => {
     }
     
     return insights;
-  }, [expenses, monthlyData, formatCurrency]);
+  }, [expenses, formatCurrency]);
 
   // Achievement badges
   const achievements = React.useMemo(() => {

@@ -50,7 +50,6 @@ const BudgetManager = ({ budgets, setBudgets, totalBudget, setTotalBudget, month
     return <CheckCircle className="w-5 h-5 text-green-500" />;
   };
 
-  const categoryBudgetTotal = Object.values(budgets).reduce((sum, val) => sum + (val || 0), 0);
   const totalSpent = monthlyData.total;
   const totalProgress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 

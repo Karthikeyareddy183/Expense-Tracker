@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Repeat, Calendar, Trash2, CheckCircle, Clock } from 'lucide-react';
+import { Repeat, Calendar, Trash2, CheckCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 const RecurringExpenses = ({ recurringExpenses, setRecurringExpenses, setExpenses, formatCurrency }) => {

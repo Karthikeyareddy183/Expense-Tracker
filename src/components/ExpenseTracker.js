@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusCircle, Calendar, DollarSign, TrendingUp, Receipt, Trash2, Edit3, 
   Search, Filter, Download, Moon, Sun, X, ChevronDown, Camera,
-  BarChart3, TrendingDown, AlertCircle,
+  BarChart3, AlertCircle,
   Settings, User, Bell
 } from 'lucide-react';
 import { toast, Toaster } from 'react-hot-toast';
@@ -226,7 +226,7 @@ const ExpenseTracker = () => {
       change,
       filtered
     };
-  }, [expenses, selectedMonth]);
+  }, [expenses, selectedMonth, categories]);
 
   // Recent expenses
   const recentExpenses = useMemo(() => {

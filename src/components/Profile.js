@@ -3,8 +3,8 @@ import { motion } from 'framer-motion';
 import { 
   User, Mail, Phone, MapPin, Briefcase, Calendar, 
   Edit3, Save, X, Camera, Settings, TrendingUp,
-  DollarSign, Target, Bell, Shield, Download, 
-  ChevronRight, Award, CreditCard
+  DollarSign, Target, Bell, Download, 
+  Award, CreditCard
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
