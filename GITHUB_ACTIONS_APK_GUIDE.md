@@ -202,7 +202,7 @@ on:
 - ✅ Ubuntu Linux environment
 - ✅ Java JDK 17
 - ✅ Android SDK
-- ✅ Node.js
+- ✅ Node.js 20 (LTS)
 - ✅ Build tools
 
 ## 🎉 Benefits
