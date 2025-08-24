@@ -1,0 +1,159 @@
+name: Build APK
+
+# Triggers: Run on push to main branch or manual trigger
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Step 3: Set up JDK
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # Step 4: Set up Android SDK
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Step 5: Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 6: Build React app
+      - name: Build React app
+        run: npm run build
+
+      # Step 7: Sync Capacitor
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      # Step 8: Make Gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      # Step 9: Build Debug APK
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      # Step 10: Upload Debug APK as artifact
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: spendsmart-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # Step 11: Rename APK with timestamp
+      - name: Rename APK
+        run: |
+          cd android/app/build/outputs/apk/debug/
+          mv app-debug.apk SpendSmart-debug-${{ github.run_number }}.apk
+
+      # Step 12: Upload renamed APK
+      - name: Upload Renamed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpendSmart-${{ github.run_number }}
+          path: android/app/build/outputs/apk/debug/SpendSmart-debug-${{ github.run_number }}.apk
+          retention-days: 30
+
+      # Step 13: Create Download Summary
+      - name: Create Download Instructions
+        run: |
+          echo "## 📱 APK Build Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Download Links:" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Number: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### How to Download:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Click on **Summary** (above)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Scroll down to **Artifacts**" >> $GITHUB_STEP_SUMMARY
+          echo "3. Click on **SpendSmart-${{ github.run_number }}** to download" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Transfer APK to your Android device" >> $GITHUB_STEP_SUMMARY
+          echo "2. Enable 'Install from Unknown Sources' in Settings" >> $GITHUB_STEP_SUMMARY
+          echo "3. Open the APK file to install" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Build Release APK (signed)
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React app
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      # For signed release APK, you would need to set up signing keys
+      # This is commented out as it requires additional setup
+      # - name: Build Release APK
+      #   run: |
+      #     cd android
+      #     ./gradlew assembleRelease
+      #   env:
+      #     SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+      #     SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+      #     SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+
+      - name: Build Unsigned Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: spendsmart-release-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30

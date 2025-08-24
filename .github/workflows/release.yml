@@ -1,0 +1,142 @@
+name: Release APK
+
+# Trigger on version tags (e.g., v1.0.0)
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release with APK
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Needed to create releases
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Step 3: Set up JDK
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # Step 4: Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 5: Build React app
+      - name: Build React app
+        run: npm run build
+
+      # Step 6: Sync Capacitor
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      # Step 7: Make Gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      # Step 8: Build Debug APK
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      # Step 9: Build Release APK (unsigned)
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      # Step 10: Get version from tag
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      # Step 11: Rename APKs
+      - name: Rename APKs
+        run: |
+          cd android/app/build/outputs/apk/
+          mv debug/app-debug.apk debug/SpendSmart-${{ steps.get_version.outputs.VERSION }}-debug.apk
+          mv release/app-release-unsigned.apk release/SpendSmart-${{ steps.get_version.outputs.VERSION }}-release-unsigned.apk
+
+      # Step 12: Create Release
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: SpendSmart ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## 📱 SpendSmart ${{ steps.get_version.outputs.VERSION }}
+            
+            ### 📥 Download Options:
+            - **SpendSmart-debug.apk** - Debug version (recommended for testing)
+            - **SpendSmart-release-unsigned.apk** - Release version (unsigned)
+            
+            ### 📋 What's New:
+            - See commit history for changes
+            
+            ### 📲 Installation:
+            1. Download the APK file to your Android device
+            2. Enable "Install from Unknown Sources" in Settings
+            3. Open the APK file to install
+            
+            ### ⚠️ Note:
+            The release APK is unsigned. For production use, it should be signed with a proper certificate.
+          draft: false
+          prerelease: false
+
+      # Step 13: Upload Debug APK to Release
+      - name: Upload Debug APK
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: android/app/build/outputs/apk/debug/SpendSmart-${{ steps.get_version.outputs.VERSION }}-debug.apk
+          asset_name: SpendSmart-${{ steps.get_version.outputs.VERSION }}-debug.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      # Step 14: Upload Release APK to Release
+      - name: Upload Release APK
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: android/app/build/outputs/apk/release/SpendSmart-${{ steps.get_version.outputs.VERSION }}-release-unsigned.apk
+          asset_name: SpendSmart-${{ steps.get_version.outputs.VERSION }}-release-unsigned.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      # Step 15: Create summary
+      - name: Create Release Summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Version: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Released APKs:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SpendSmart-${{ steps.get_version.outputs.VERSION }}-debug.apk" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SpendSmart-${{ steps.get_version.outputs.VERSION }}-release-unsigned.apk" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to the [Releases](https://github.com/${{ github.repository }}/releases) page" >> $GITHUB_STEP_SUMMARY
+          echo "2. Share the release link with users" >> $GITHUB_STEP_SUMMARY
+          echo "3. Users can download APK directly from the release page" >> $GITHUB_STEP_SUMMARY
