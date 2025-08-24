@@ -200,7 +200,7 @@ on:
 
 ### GitHub Actions Provides:
 - ✅ Ubuntu Linux environment
-- ✅ Java JDK 17
+- ✅ Java JDK 21
 - ✅ Android SDK
 - ✅ Node.js 20 (LTS)
 - ✅ Build tools
